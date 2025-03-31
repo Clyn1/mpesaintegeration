@@ -7,8 +7,16 @@ const config = {
   consumerSecret: process.env.MPESA_CONSUMER_SECRET,
   businessShortCode: process.env.MPESA_SHORTCODE,
   passkey: process.env.MPESA_PASSKEY,
-  baseUrl: process.env.MPESA_BASE_URL
+  baseUrl: process.env.MPESA_BASE_URL || 'https://sandbox.safaricom.co.ke'
 };
+
+// Debug logging
+console.log('Environment Variables Check:');
+console.log('MPESA_CONSUMER_KEY exists:', !!process.env.MPESA_CONSUMER_KEY);
+console.log('MPESA_CONSUMER_SECRET exists:', !!process.env.MPESA_CONSUMER_SECRET);
+console.log('MPESA_SHORTCODE exists:', !!process.env.MPESA_SHORTCODE);
+console.log('MPESA_PASSKEY exists:', !!process.env.MPESA_PASSKEY);
+console.log('MPESA_BASE_URL:', process.env.MPESA_BASE_URL);
 
 // Generate timestamp in the required format
 const generateTimestamp = () => {
@@ -17,17 +25,28 @@ const generateTimestamp = () => {
 
 // Generate password for STK Push
 const generatePassword = (shortcode, passkey, timestamp) => {
+  if (!shortcode || !passkey) {
+    throw new Error('Missing required configuration: shortcode or passkey');
+  }
   return Buffer.from(shortcode + passkey + timestamp).toString('base64');
 };
 
 // Get M-Pesa access token
 const getAccessToken = async () => {
   try {
-    console.log('Getting access token...');
-    console.log('Consumer Key:', config.consumerKey);
-    console.log('Consumer Secret:', config.consumerSecret);
+    if (!config.consumerKey || !config.consumerSecret) {
+      throw new Error('Missing required configuration: consumerKey or consumerSecret');
+    }
+
+    console.log('Getting access token with config:', {
+      baseUrl: config.baseUrl,
+      consumerKeyExists: !!config.consumerKey,
+      consumerSecretExists: !!config.consumerSecret
+    });
     
     const auth = Buffer.from(`${config.consumerKey}:${config.consumerSecret}`).toString('base64');
+    console.log('Generated auth header');
+
     const response = await axios.get(`${config.baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
       headers: {
         Authorization: `Basic ${auth}`
@@ -37,8 +56,12 @@ const getAccessToken = async () => {
     console.log('Access token response:', response.data);
     return response.data.access_token;
   } catch (error) {
-    console.error('Error getting access token:', error.response ? error.response.data : error.message);
-    throw new Error('Failed to get access token: ' + (error.response ? JSON.stringify(error.response.data) : error.message));
+    console.error('Error getting access token:', {
+      message: error.message,
+      response: error.response?.data,
+      stack: error.stack
+    });
+    throw new Error('Failed to get access token: ' + (error.response?.data ? JSON.stringify(error.response.data) : error.message));
   }
 };
 
@@ -70,6 +93,19 @@ exports.handler = async function(event, context) {
         headers,
         body: JSON.stringify({
           error: 'Missing required fields: phone_number and amount are required'
+        })
+      };
+    }
+
+    // Validate configuration
+    if (!config.businessShortCode || !config.passkey) {
+      console.error('Missing required configuration');
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({
+          error: 'Server configuration error',
+          details: 'Missing required M-Pesa configuration'
         })
       };
     }
@@ -123,13 +159,17 @@ exports.handler = async function(event, context) {
       body: JSON.stringify(response.data)
     };
   } catch (error) {
-    console.error('STK Push error:', error.response ? error.response.data : error.message);
+    console.error('STK Push error:', {
+      message: error.message,
+      response: error.response?.data,
+      stack: error.stack
+    });
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({
         error: 'Failed to initiate payment',
-        details: error.response ? error.response.data : error.message
+        details: error.response?.data || error.message
       })
     };
   }
