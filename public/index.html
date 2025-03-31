@@ -86,6 +86,10 @@
             const description = document.getElementById('description').value;
 
             try {
+                statusDiv.style.display = 'block';
+                statusDiv.className = 'info';
+                statusDiv.textContent = 'Processing payment request...';
+
                 const response = await fetch('/.netlify/functions/stkPush', {
                     method: 'POST',
                     headers: {
@@ -100,20 +104,25 @@
                 });
 
                 const data = await response.json();
+                console.log('Response:', data);
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to process payment');
+                }
                 
                 statusDiv.style.display = 'block';
-                if (data.ResponseCode === '0') {
+                if (data.ResponseCode === '0' || data.ResponseCode === 0) {
                     statusDiv.className = 'success';
                     statusDiv.textContent = 'Payment request sent! Please check your phone for the STK Push prompt.';
                 } else {
                     statusDiv.className = 'error';
-                    statusDiv.textContent = `Error: ${data.ResponseDescription}`;
+                    statusDiv.textContent = `Error: ${data.ResponseDescription || 'Unknown error occurred'}`;
                 }
             } catch (error) {
+                console.error('Error:', error);
                 statusDiv.style.display = 'block';
                 statusDiv.className = 'error';
-                statusDiv.textContent = 'An error occurred. Please try again.';
-                console.error('Error:', error);
+                statusDiv.textContent = `Error: ${error.message || 'An error occurred. Please try again.'}`;
             }
         });
     </script>

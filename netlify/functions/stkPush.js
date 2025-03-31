@@ -23,16 +23,22 @@ const generatePassword = (shortcode, passkey, timestamp) => {
 // Get M-Pesa access token
 const getAccessToken = async () => {
   try {
+    console.log('Getting access token...');
+    console.log('Consumer Key:', config.consumerKey);
+    console.log('Consumer Secret:', config.consumerSecret);
+    
     const auth = Buffer.from(`${config.consumerKey}:${config.consumerSecret}`).toString('base64');
     const response = await axios.get(`${config.baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
       headers: {
         Authorization: `Basic ${auth}`
       }
     });
+    
+    console.log('Access token response:', response.data);
     return response.data.access_token;
   } catch (error) {
-    console.error('Error getting access token:', error);
-    throw new Error('Failed to get access token');
+    console.error('Error getting access token:', error.response ? error.response.data : error.message);
+    throw new Error('Failed to get access token: ' + (error.response ? JSON.stringify(error.response.data) : error.message));
   }
 };
 
@@ -53,10 +59,12 @@ exports.handler = async function(event, context) {
   }
 
   try {
+    console.log('Request body:', event.body);
     const { phone_number, amount, account_reference, transaction_desc } = JSON.parse(event.body);
 
     // Validate required fields
     if (!phone_number || !amount) {
+      console.error('Missing required fields');
       return {
         statusCode: 400,
         headers,
@@ -68,9 +76,11 @@ exports.handler = async function(event, context) {
 
     // Format phone number (remove leading 0 and add country code if needed)
     const formattedPhone = phone_number.replace(/^0/, '254');
+    console.log('Formatted phone:', formattedPhone);
 
     // Get access token
     const accessToken = await getAccessToken();
+    console.log('Access token obtained');
 
     // Generate timestamp and password
     const timestamp = generateTimestamp();
@@ -82,14 +92,16 @@ exports.handler = async function(event, context) {
       Password: password,
       Timestamp: timestamp,
       TransactionType: 'CustomerPayBillOnline',
-      Amount: amount,
+      Amount: parseInt(amount),
       PartyA: formattedPhone,
       PartyB: config.businessShortCode,
       PhoneNumber: formattedPhone,
-      CallBackURL: `${process.env.URL}/.netlify/functions/callback`,
-      AccountReference: account_reference || 'Payment',
-      TransactionDesc: transaction_desc || 'Payment for services'
+      CallBackURL: `${process.env.URL || 'https://techmoms.netlify.app'}/.netlify/functions/callback`,
+      AccountReference: account_reference || 'Test',
+      TransactionDesc: transaction_desc || 'Test Payment'
     };
+
+    console.log('STK Push request:', stkPushRequest);
 
     // Make STK Push request
     const response = await axios.post(
@@ -103,19 +115,21 @@ exports.handler = async function(event, context) {
       }
     );
 
+    console.log('STK Push response:', response.data);
+
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify(response.data)
     };
   } catch (error) {
-    console.error('STK Push error:', error);
+    console.error('STK Push error:', error.response ? error.response.data : error.message);
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({
         error: 'Failed to initiate payment',
-        details: error.message
+        details: error.response ? error.response.data : error.message
       })
     };
   }
