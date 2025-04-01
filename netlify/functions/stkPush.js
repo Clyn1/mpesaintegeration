@@ -132,7 +132,7 @@ exports.handler = async function(event, context) {
       PartyA: formattedPhone,
       PartyB: config.businessShortCode,
       PhoneNumber: formattedPhone,
-      CallBackURL: 'https://techmoms.netlify.app/.netlify/functions/callback',
+      CallBackURL: 'https://techmoms.netlify.app',
       AccountReference: account_reference || 'Test',
       TransactionDesc: transaction_desc || 'Test Payment'
     };
