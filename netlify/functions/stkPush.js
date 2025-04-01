@@ -132,12 +132,12 @@ exports.handler = async function(event, context) {
       PartyA: formattedPhone,
       PartyB: config.businessShortCode,
       PhoneNumber: formattedPhone,
-      CallBackURL: 'https://techmoms.netlify.app',
+      CallBackURL: 'https://techmoms.netlify.app/.netlify/functions/callback',
       AccountReference: account_reference || 'Test',
       TransactionDesc: transaction_desc || 'Test Payment'
     };
 
-    console.log('STK Push request:', stkPushRequest);
+    console.log('STK Push request:', JSON.stringify(stkPushRequest, null, 2));
 
     // Make STK Push request
     const response = await axios.post(
@@ -151,12 +151,18 @@ exports.handler = async function(event, context) {
       }
     );
 
-    console.log('STK Push response:', response.data);
+    console.log('STK Push response:', JSON.stringify(response.data, null, 2));
 
+    // Return success response
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify(response.data)
+      body: JSON.stringify({
+        ResponseCode: '0',
+        ResponseDescription: 'Success. Request accepted for processing',
+        MerchantRequestID: response.data.MerchantRequestID,
+        CheckoutRequestID: response.data.CheckoutRequestID
+      })
     };
   } catch (error) {
     console.error('STK Push error:', {
