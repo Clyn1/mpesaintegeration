@@ -42,6 +42,10 @@
             background-color: #f8d7da;
             color: #721c24;
         }
+        .info {
+            background-color: #cce5ff;
+            color: #004085;
+        }
     </style>
 </head>
 <body>
@@ -74,6 +78,26 @@
     </div>
 
     <script>
+        // Check for callback parameters in URL
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const resultCode = urlParams.get('ResultCode');
+            const resultDesc = urlParams.get('ResultDesc');
+            
+            if (resultCode !== null) {
+                const statusDiv = document.getElementById('status');
+                statusDiv.style.display = 'block';
+                
+                if (resultCode === '0') {
+                    statusDiv.className = 'success';
+                    statusDiv.textContent = 'Payment successful! Thank you for your payment.';
+                } else {
+                    statusDiv.className = 'error';
+                    statusDiv.textContent = `Payment failed: ${resultDesc || 'Unknown error'}`;
+                }
+            }
+        };
+
         document.getElementById('mpesaForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
