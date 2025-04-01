@@ -18,65 +18,52 @@ console.log('MPESA_SHORTCODE exists:', !!process.env.MPESA_SHORTCODE);
 console.log('MPESA_PASSKEY exists:', !!process.env.MPESA_PASSKEY);
 console.log('MPESA_BASE_URL:', process.env.MPESA_BASE_URL);
 
-// Generate timestamp in the required format
-const generateTimestamp = () => {
-  return new Date().toISOString().replace(/[-T:.Z]/g, '');
+// CORS headers
+const headers = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
 };
 
-// Generate password for STK Push
-const generatePassword = (shortcode, passkey, timestamp) => {
-  if (!shortcode || !passkey) {
-    throw new Error('Missing required configuration: shortcode or passkey');
-  }
-  return Buffer.from(shortcode + passkey + timestamp).toString('base64');
-};
+// Generate timestamp in the format YYYYMMDDHHmmss
+function generateTimestamp() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  return `${year}${month}${day}${hours}${minutes}${seconds}`;
+}
 
-// Get M-Pesa access token
-const getAccessToken = async () => {
+// Generate password
+function generatePassword(businessShortCode, passkey, timestamp) {
+  const str = businessShortCode + passkey + timestamp;
+  return Buffer.from(str).toString('base64');
+}
+
+// Get access token
+async function getAccessToken() {
   try {
-    if (!config.consumerKey || !config.consumerSecret) {
-      throw new Error('Missing required configuration: consumerKey or consumerSecret');
-    }
-
-    console.log('Getting access token with config:', {
-      baseUrl: config.baseUrl,
-      consumerKeyExists: !!config.consumerKey,
-      consumerSecretExists: !!config.consumerSecret
-    });
-    
     const auth = Buffer.from(`${config.consumerKey}:${config.consumerSecret}`).toString('base64');
-    console.log('Generated auth header');
-
     const response = await axios.get(`${config.baseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
       headers: {
         Authorization: `Basic ${auth}`
       }
     });
-    
-    console.log('Access token response:', response.data);
     return response.data.access_token;
   } catch (error) {
-    console.error('Error getting access token:', {
-      message: error.message,
-      response: error.response?.data,
-      stack: error.stack
-    });
-    throw new Error('Failed to get access token: ' + (error.response?.data ? JSON.stringify(error.response.data) : error.message));
+    console.error('Error getting access token:', error.response?.data || error.message);
+    throw new Error('Failed to get access token');
   }
-};
+}
 
 exports.handler = async function(event, context) {
-  // Enable CORS
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS'
-  };
-
-  // Handle preflight requests
+  // Handle CORS preflight requests
   if (event.httpMethod === 'OPTIONS') {
     return {
-      statusCode: 204,
+      statusCode: 200,
       headers
     };
   }
@@ -106,8 +93,8 @@ exports.handler = async function(event, context) {
     }
 
     // Validate configuration
-    if (!config.businessShortCode || !config.passkey) {
-      const error = `Missing M-Pesa configuration: ${!config.businessShortCode ? 'businessShortCode ' : ''}${!config.passkey ? 'passkey' : ''}`;
+    if (!config.consumerKey || !config.consumerSecret || !config.businessShortCode || !config.passkey) {
+      const error = `Missing M-Pesa configuration: ${!config.consumerKey ? 'consumerKey ' : ''}${!config.consumerSecret ? 'consumerSecret ' : ''}${!config.businessShortCode ? 'businessShortCode ' : ''}${!config.passkey ? 'passkey' : ''}`;
       console.error(error);
       return {
         statusCode: 500,
@@ -142,7 +129,7 @@ exports.handler = async function(event, context) {
       PartyA: formattedPhone,
       PartyB: config.businessShortCode,
       PhoneNumber: formattedPhone,
-      CallBackURL: 'https://techmoms.netlify.app',
+      CallBackURL: 'https://techmoms.netlify.app/.netlify/functions/callback',
       AccountReference: account_reference || 'Test',
       TransactionDesc: transaction_desc || 'Test Payment'
     };
