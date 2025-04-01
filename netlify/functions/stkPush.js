@@ -85,42 +85,52 @@ exports.handler = async function(event, context) {
     console.log('Request body:', event.body);
     const { phone_number, amount, account_reference, transaction_desc } = JSON.parse(event.body);
 
+    // Log environment variables (safely)
+    console.log('Environment check:', {
+      CONSUMER_KEY_EXISTS: !!process.env.MPESA_CONSUMER_KEY,
+      CONSUMER_SECRET_EXISTS: !!process.env.MPESA_CONSUMER_SECRET,
+      SHORTCODE_EXISTS: !!process.env.MPESA_SHORTCODE,
+      PASSKEY_EXISTS: !!process.env.MPESA_PASSKEY,
+      BASE_URL: process.env.MPESA_BASE_URL
+    });
+
     // Validate required fields
     if (!phone_number || !amount) {
-      console.error('Missing required fields');
+      const error = 'Missing required fields: phone_number and amount are required';
+      console.error(error);
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({
-          error: 'Missing required fields: phone_number and amount are required'
-        })
+        body: JSON.stringify({ error })
       };
     }
 
     // Validate configuration
     if (!config.businessShortCode || !config.passkey) {
-      console.error('Missing required configuration');
+      const error = `Missing M-Pesa configuration: ${!config.businessShortCode ? 'businessShortCode ' : ''}${!config.passkey ? 'passkey' : ''}`;
+      console.error(error);
       return {
         statusCode: 500,
         headers,
-        body: JSON.stringify({
-          error: 'Server configuration error',
-          details: 'Missing required M-Pesa configuration'
-        })
+        body: JSON.stringify({ error })
       };
     }
 
     // Format phone number (remove leading 0 and add country code if needed)
-    const formattedPhone = phone_number.replace(/^0/, '254');
+    const formattedPhone = phone_number.startsWith('254') ? phone_number : phone_number.replace(/^0?/, '254');
     console.log('Formatted phone:', formattedPhone);
 
     // Get access token
+    console.log('Attempting to get access token...');
     const accessToken = await getAccessToken();
-    console.log('Access token obtained');
+    console.log('Access token obtained successfully');
 
     // Generate timestamp and password
     const timestamp = generateTimestamp();
+    console.log('Generated timestamp:', timestamp);
+    
     const password = generatePassword(config.businessShortCode, config.passkey, timestamp);
+    console.log('Generated password successfully');
 
     // Prepare STK Push request
     const stkPushRequest = {
@@ -132,14 +142,15 @@ exports.handler = async function(event, context) {
       PartyA: formattedPhone,
       PartyB: config.businessShortCode,
       PhoneNumber: formattedPhone,
-      CallBackURL: 'https://techmoms.netlify.app/.netlify/functions/callback',
+      CallBackURL: 'https://techmoms.netlify.app',
       AccountReference: account_reference || 'Test',
       TransactionDesc: transaction_desc || 'Test Payment'
     };
 
-    console.log('STK Push request:', JSON.stringify(stkPushRequest, null, 2));
+    console.log('Prepared STK Push request:', JSON.stringify(stkPushRequest, null, 2));
 
     // Make STK Push request
+    console.log('Sending STK Push request to:', `${config.baseUrl}/mpesa/stkpush/v1/processrequest`);
     const response = await axios.post(
       `${config.baseUrl}/mpesa/stkpush/v1/processrequest`,
       stkPushRequest,
@@ -153,29 +164,39 @@ exports.handler = async function(event, context) {
 
     console.log('STK Push response:', JSON.stringify(response.data, null, 2));
 
-    // Return success response
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        ResponseCode: '0',
-        ResponseDescription: 'Success. Request accepted for processing',
-        MerchantRequestID: response.data.MerchantRequestID,
-        CheckoutRequestID: response.data.CheckoutRequestID
-      })
-    };
+    // Check if the response indicates success
+    if (response.data.ResponseCode === '0') {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          message: 'Payment request sent successfully',
+          data: response.data
+        })
+      };
+    } else {
+      throw new Error(response.data.ResponseDescription || 'Failed to initiate payment');
+    }
   } catch (error) {
-    console.error('STK Push error:', {
+    console.error('Detailed error information:', {
       message: error.message,
       response: error.response?.data,
-      stack: error.stack
+      stack: error.stack,
+      config: error.config ? {
+        url: error.config.url,
+        method: error.config.method,
+        headers: error.config.headers
+      } : null
     });
+
     return {
-      statusCode: 500,
+      statusCode: error.response?.status || 500,
       headers,
       body: JSON.stringify({
         error: 'Failed to initiate payment',
-        details: error.response?.data || error.message
+        details: error.response?.data || error.message,
+        errorCode: error.response?.status || 500
       })
     };
   }

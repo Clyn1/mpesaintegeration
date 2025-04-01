@@ -78,75 +78,65 @@
     </div>
 
     <script>
-        // Check for callback parameters in URL
-        window.onload = function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const resultCode = urlParams.get('ResultCode');
-            const resultDesc = urlParams.get('ResultDesc');
-            
-            if (resultCode !== null) {
-                const statusDiv = document.getElementById('status');
-                statusDiv.style.display = 'block';
-                
-                if (resultCode === '0') {
-                    statusDiv.className = 'success';
-                    statusDiv.textContent = 'Payment successful! Thank you for your payment.';
-                } else {
-                    statusDiv.className = 'error';
-                    statusDiv.textContent = `Payment failed: ${resultDesc || 'Unknown error'}`;
-                }
-            }
-        };
-
-        document.getElementById('mpesaForm').addEventListener('submit', async function(e) {
+        // Handle form submission
+        document.getElementById('mpesaForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const statusDiv = document.getElementById('status');
-            statusDiv.style.display = 'none';
-            
-            const phone = document.getElementById('phone').value;
+            const phoneNumber = document.getElementById('phone').value;
             const amount = document.getElementById('amount').value;
             const reference = document.getElementById('reference').value;
             const description = document.getElementById('description').value;
-
+            
+            // Show loading state
+            const status = document.getElementById('status');
+            status.textContent = 'Initiating payment...';
+            status.className = 'info';
+            
             try {
-                statusDiv.style.display = 'block';
-                statusDiv.className = 'info';
-                statusDiv.textContent = 'Processing payment request...';
-
                 const response = await fetch('/.netlify/functions/stkPush', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        phone_number: phone,
+                        phone_number: phoneNumber,
                         amount: amount,
                         account_reference: reference,
                         transaction_desc: description
                     })
                 });
-
+                
                 const data = await response.json();
-                console.log('Response:', data);
+                console.log('Payment response:', data);
                 
-                if (!response.ok) {
-                    throw new Error(data.error || 'Failed to process payment');
-                }
-                
-                statusDiv.style.display = 'block';
-                if (data.ResponseCode === '0' || data.ResponseCode === 0) {
-                    statusDiv.className = 'success';
-                    statusDiv.textContent = 'Payment request sent! Please check your phone for the STK Push prompt.';
+                if (data.success) {
+                    status.textContent = 'Payment request sent! Please check your phone for the STK Push prompt.';
+                    status.className = 'success';
                 } else {
-                    statusDiv.className = 'error';
-                    statusDiv.textContent = `Error: ${data.ResponseDescription || 'Unknown error occurred'}`;
+                    throw new Error(data.error || 'Failed to initiate payment');
                 }
             } catch (error) {
-                console.error('Error:', error);
-                statusDiv.style.display = 'block';
-                statusDiv.className = 'error';
-                statusDiv.textContent = `Error: ${error.message || 'An error occurred. Please try again.'}`;
+                console.error('Payment error:', error);
+                status.textContent = `Error: ${error.message || 'Failed to initiate payment. Please try again.'}`;
+                status.className = 'error';
+            }
+        });
+
+        // Check for callback parameters in URL
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const resultCode = urlParams.get('ResultCode');
+            const resultDesc = urlParams.get('ResultDesc');
+            
+            if (resultCode) {
+                const status = document.getElementById('status');
+                if (resultCode === '0') {
+                    status.textContent = 'Payment successful! Thank you for your payment.';
+                    status.className = 'success';
+                } else {
+                    status.textContent = `Payment failed: ${resultDesc || 'Unknown error'}`;
+                    status.className = 'error';
+                }
             }
         });
     </script>
