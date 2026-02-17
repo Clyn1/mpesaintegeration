@@ -1,6 +1,6 @@
 # M-Pesa Integration with Firebase Functions
 
-This project provides a Netlify-compatible solution for M-Pesa integration using Firebase Functions. It includes both the backend (Firebase Functions) and frontend (static HTML) components.
+This project provides a Netlify-compatible solution for M-Pesa integration using Firebase Functions. It includes both the backend (Firebase Functions) and frontend (static HTML) components
 
 ## Prerequisites
 
