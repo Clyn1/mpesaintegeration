@@ -98,7 +98,7 @@ firebase-mpesa/
 2. Use environment variables
 3. Implement proper validation
 4. Use HTTPS only
-5. Monitor Firebase logs
+5. Monitor Firebase logs.
 
 ## Support
 
